@@ -1,0 +1,982 @@
+---
+title: "Final Project"
+author: Adarsh (AP2459) || Atharwa (AP2467) || Rethyam (RG795) || Riley (RGB234)
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+# Load required libraries
+library(quantmod)
+```
+
+### Project Question 1
+
+```{r}
+# Define the ticker for the Nasdaq Technology Sector and top companies
+sector_ticker <- "^NDXT"  # Nasdaq Technology Sector Index
+company_tickers <- c("AAPL", "MSFT", "GOOGL", "AMZN") 
+# Set the date range for analysis
+start_date <- as.Date("2017-01-01")
+end_date <- as.Date("2019-12-31")
+# Function to get adjusted closing prices
+get_adj_close <- function(ticker) {
+  data <- getSymbols(ticker, src = "yahoo", from = start_date, 
+                     to = end_date, auto.assign = FALSE)
+  Ad(data)
+}
+# Fetch data for the sector and companies
+sector_prices <- get_adj_close(sector_ticker)
+company_prices <- lapply(company_tickers, get_adj_close)
+# Calculate daily log returns
+sector_returns <- dailyReturn(sector_prices, type = "log")
+company_returns <- lapply(company_prices, dailyReturn, type = "log")
+# Calculate cumulative returns with proper indexing
+sector_cum_returns <- cumprod(1 + sector_returns) - 1
+sector_cum_returns <- xts(sector_cum_returns, order.by = index(sector_returns))
+company_cum_returns <- lapply(company_returns, function(x) {
+  cum_returns <- cumprod(1 + x) - 1
+  xts(cum_returns, order.by = index(x))
+})
+# Find the range of cumulative returns for setting plot boundaries
+all_cum_returns <- c(sector_cum_returns, do.call(c, company_cum_returns))
+ylim_range <- range(all_cum_returns, na.rm = TRUE)
+# Plot cumulative returns with adjusted boundaries
+plot(index(sector_cum_returns), sector_cum_returns, type = "l", 
+     col = "blue", lwd = 2,
+     xlab = "Date", ylab = "Cumulative Return", 
+     main = "Cumulative Performance",
+     ylim = ylim_range)  # Set y-axis limits
+lines(index(company_cum_returns[[1]]), company_cum_returns[[1]], 
+      col = "red", lwd = 2)
+lines(index(company_cum_returns[[2]]), company_cum_returns[[2]], 
+      col = "green", lwd = 2)
+lines(index(company_cum_returns[[3]]), company_cum_returns[[3]], 
+      col = "purple", lwd = 2)
+lines(index(company_cum_returns[[4]]), company_cum_returns[[4]], 
+      col = "orange", lwd = 2)
+# Add a legend
+legend("topleft", legend = c("Sector", company_tickers), 
+       col = c("blue", "red", "green", "purple", "orange"), lwd = 2)
+```
+
+```{r}
+# Define the ticker for the Nasdaq Technology Sector and top companies
+sector_ticker <- "^NDXT"  # Nasdaq Technology Sector Index
+company_tickers <- c("AAPL", "MSFT", "GOOGL", "AMZN")
+# Set the date range for analysis
+start_date <- as.Date("2017-01-01")
+end_date <- as.Date("2019-12-31")
+# Function to get adjusted closing prices
+get_adj_close <- function(ticker) {
+  data <- getSymbols(ticker, src = "yahoo", from = start_date, 
+                     to = end_date, auto.assign = FALSE)
+  Ad(data)
+}
+# Fetch data for the sector and companies
+sector_prices <- get_adj_close(sector_ticker)
+company_prices <- lapply(company_tickers, get_adj_close)
+# Calculate daily log returns
+sector_returns <- dailyReturn(sector_prices, type = "log")
+company_returns <- lapply(company_prices, dailyReturn, type = "log")
+# Combine sector and company returns into one data frame
+all_returns <- data.frame(
+  Date = index(sector_returns),
+  Sector = coredata(sector_returns),
+  do.call(cbind, lapply(company_returns, coredata))
+)
+colnames(all_returns) <- c("Date", "Sector", company_tickers)
+# Print the first five and last five daily returns
+cat("First 5 Daily Returns:\n")
+print(head(all_returns, 10))
+cat("\nLast 5 Daily Returns:\n")
+print(tail(all_returns, 10))
+```
+
+### Project Question 2
+
+```{r}
+# Define a function to calculate summary statistics by year
+calculate_yearly_stats <- function(returns, dates) {
+  yearly_stats <- aggregate(returns, 
+                            by = list(Year = format(dates, "%Y")), 
+                            FUN = function(x) c(Mean = mean(x, na.rm = TRUE), 
+                                                SD = sd(x, na.rm = TRUE)))
+  # Separate Mean and SD into separate columns
+  yearly_stats <- do.call(data.frame, yearly_stats)
+  colnames(yearly_stats)[-1] <- c("Mean", "SD")  # Rename columns
+  return(yearly_stats)
+}
+# Calculate statistics for the sector
+sector_yearly_stats <- calculate_yearly_stats(as.numeric(sector_returns), 
+                                              index(sector_returns))
+sector_yearly_stats$Ticker <- sector_ticker
+# Calculate statistics for each company
+company_yearly_stats <- lapply(company_returns, function(x) {
+  calculate_yearly_stats(as.numeric(x), index(x))
+})
+for (i in 1:length(company_tickers)) {
+  company_yearly_stats[[i]]$Ticker <- company_tickers[i]
+}
+# Combine sector and company statistics
+all_yearly_stats <- do.call(rbind, c(list(sector_yearly_stats), 
+                                     company_yearly_stats))
+# Generate separate tables for each year
+years <- unique(all_yearly_stats$Year)
+tables_by_year <- lapply(years, function(year) {
+  subset_stats <- all_yearly_stats[all_yearly_stats$Year == year, 
+                                   c("Ticker", "Mean", "SD")]
+  subset_stats$Mean <- 
+    sprintf("%.3f (%.3f%%)", 
+            subset_stats$Mean, as.numeric(subset_stats$Mean) * 100)
+  subset_stats$SD <- sprintf("%.3f", subset_stats$SD)
+  colnames(subset_stats) <- c("Ticker", paste0("Mean_", year), 
+                              paste0("SD_", year))
+  return(subset_stats)
+})
+# Print tables for each year
+for (i in seq_along(years)) {
+  cat(sprintf("Summary Statistics for %s\n", years[i]))
+  print(tables_by_year[[i]])
+  cat("\n")
+}
+```
+### Project Question 1 and 2 Extra for 2020-2022
+
+```{r}
+# Define the ticker for the Nasdaq Technology Sector and top companies
+tech_index_ticker <- "^NDXT"  # Nasdaq Technology Sector Index
+tech_company_tickers <- c("AAPL", "MSFT", "GOOGL", "AMZN") 
+# Set the date range for analysis
+analysis_start_date <- as.Date("2020-01-01")
+analysis_end_date <- as.Date("2022-12-31")
+# Function to get adjusted closing prices
+fetch_adj_close <- function(symbol) {
+  price_data <- getSymbols(symbol, src = "yahoo", from = analysis_start_date, 
+                           to = analysis_end_date, auto.assign = FALSE)
+  Ad(price_data)
+}
+# Fetch data for the sector and companies
+tech_index_prices <- fetch_adj_close(tech_index_ticker)
+tech_company_prices <- lapply(tech_company_tickers, fetch_adj_close)
+# Calculate daily log returns
+tech_index_returns <- dailyReturn(tech_index_prices, type = "log")
+tech_company_returns <- lapply(tech_company_prices, 
+                               dailyReturn, type = "log")
+# Calculate cumulative returns with proper indexing
+tech_index_cum_returns <- cumprod(1 + tech_index_returns) - 1
+tech_index_cum_returns <- xts(tech_index_cum_returns, 
+                              order.by = index(tech_index_returns))
+tech_company_cum_returns <- lapply(tech_company_returns, function(y) {
+  cumulative_returns <- cumprod(1 + y) - 1
+  xts(cumulative_returns, order.by = index(y))
+})
+# Find the range of cumulative returns for setting plot boundaries
+combined_cum_returns <- c(tech_index_cum_returns, 
+                          do.call(c, tech_company_cum_returns))
+y_axis_limits <- range(combined_cum_returns, na.rm = TRUE)
+# Plot cumulative returns with adjusted boundaries
+plot(index(tech_index_cum_returns), tech_index_cum_returns, type = "l", 
+     col = "blue", lwd = 2,
+     xlab = "Date", ylab = "Cumulative Return", 
+     main = "Cumulative Performance",
+     ylim = y_axis_limits)  # Set y-axis limits
+lines(index(tech_company_cum_returns[[1]]), tech_company_cum_returns[[1]], 
+      col = "red", lwd = 2)
+lines(index(tech_company_cum_returns[[2]]), tech_company_cum_returns[[2]], 
+      col = "green", lwd = 2)
+lines(index(tech_company_cum_returns[[3]]), tech_company_cum_returns[[3]], 
+      col = "purple", lwd = 2)
+lines(index(tech_company_cum_returns[[4]]), tech_company_cum_returns[[4]], 
+      col = "orange", lwd = 2)
+# Add a legend
+legend("topleft", legend = c("Sector", tech_company_tickers), 
+       col = c("blue", "red", "green", "purple", "orange"), lwd = 2)
+# Define a function to calculate summary statistics by year
+compute_annual_stats <- function
+(returns, dates) {
+  annual_stats <- aggregate(returns, 
+                            by = list(Year = format(dates, "%Y")), 
+                            FUN = function(x) c(Mean = mean(x, na.rm = TRUE), 
+                                                SD = sd(x, na.rm = TRUE)))
+  # Separate Mean and SD into separate columns
+  annual_stats <- do.call(data.frame, annual_stats)
+  colnames(annual_stats)[-1] <- c("Mean", "SD")  # Rename columns
+  return(annual_stats)
+}
+# Calculate statistics for the tech index
+tech_index_annual_stats <- compute_annual_stats(as.numeric(tech_index_returns), 
+                                                index(tech_index_returns))
+tech_index_annual_stats$Ticker <- tech_index_ticker
+# Calculate statistics for each company
+tech_company_annual_stats <- lapply(tech_company_returns, function(x) {
+  compute_annual_stats(as.numeric(x), index(x))
+})
+for (i in 1:length(tech_company_tickers)) {
+  tech_company_annual_stats[[i]]$Ticker <- tech_company_tickers[i]
+}
+# Combine tech index and company statistics
+all_annual_stats <- do.call(rbind, c(list(tech_index_annual_stats), 
+                                     tech_company_annual_stats))
+# Generate separate tables for each year
+analysis_years <- unique(all_annual_stats$Year)
+yearly_tables <- lapply(analysis_years, function(year) {
+  filtered_stats <- all_annual_stats[all_annual_stats$Year == year, 
+                                     c("Ticker", "Mean", "SD")]
+  filtered_stats$Mean <- 
+    sprintf("%.3f (%.3f%%)", 
+            filtered_stats$Mean, as.numeric(filtered_stats$Mean) * 100)
+  filtered_stats$SD <- sprintf("%.3f", filtered_stats$SD)
+  colnames(filtered_stats) <- c("Ticker", paste0("Mean_", year), 
+                                 paste0("SD_", year))
+  return(filtered_stats)
+})
+# Print tables for each year
+for (j in seq_along(analysis_years)) {
+  cat(sprintf("Summary Statistics for %s\n", analysis_years[j]))
+  print(yearly_tables[[j]])
+  cat("\n")
+}
+```
+### Project Question 3
+
+```{r}
+# Define the annual risk-free rate
+annual_risk_free_rate <- 0.02  # 2%
+daily_risk_free_rate <- annual_risk_free_rate / 252  # Convert to daily rate
+# Combine company returns into a matrix for portfolio optimization
+company_returns_matrix <- do.call(merge, company_returns)
+colnames(company_returns_matrix) <- company_tickers
+# Define a function for portfolio optimization
+portfolio_optimization <- function(returns_matrix) {
+  # Calculate the covariance matrix
+  cov_matrix <- cov(returns_matrix, use = "complete.obs")
+  # Invert the covariance matrix
+  inv_cov_matrix <- solve(cov_matrix)
+  # Calculate weights for the minimum variance portfolio
+  weights <- 
+    inv_cov_matrix %*% rep(1, ncol(returns_matrix)) / sum(inv_cov_matrix)
+  return(as.numeric(weights))
+}
+# Calculate portfolio weights
+portfolio_weights <- portfolio_optimization(company_returns_matrix)
+names(portfolio_weights) <- company_tickers
+# Calculate portfolio returns
+portfolio_returns <- 
+  as.matrix(company_returns_matrix) %*% portfolio_weights
+portfolio_returns <- 
+  xts(portfolio_returns, order.by = index(company_returns_matrix))
+# Calculate daily summary statistics for the portfolio
+portfolio_mean <- mean(portfolio_returns, na.rm = TRUE)  # Daily mean return
+portfolio_mean_pct <- portfolio_mean * 100  # Convert to percentage
+portfolio_sd <- sd(portfolio_returns, na.rm = TRUE)  # Daily standard deviation
+# Calculate annualized Sharpe ratio
+portfolio_annualized_sharpe <- 
+  ((portfolio_mean - daily_risk_free_rate) * 252) / (portfolio_sd * sqrt(252))
+# Print Portfolio Weights
+print("==== Portfolio Weights (Minimum Variance Portfolio) ====")
+print(round(portfolio_weights, 3))
+# Print Portfolio and Sector Summary
+sector_mean <- mean(sector_returns, na.rm = TRUE)
+sector_mean_pct <- sector_mean * 100  # Convert to percentage
+sector_sd <- sd(sector_returns, na.rm = TRUE)
+sector_annualized_sharpe <- 
+  ((sector_mean - daily_risk_free_rate) * 252) / (sector_sd * sqrt(252))
+print("\n==== Portfolio and Sector Return Summary ====")
+print(paste("| Mean (%):", round(portfolio_mean_pct, 3), "%",
+            "| Sigma (Daily):", round(portfolio_sd, 3),
+            "| Annualized Sharpe (2% rf):", 
+            round(portfolio_annualized_sharpe, 3)))
+print(paste("| Mean (%):", round(sector_mean_pct, 3), "%",
+            "| Sigma (Daily):", round(sector_sd, 3),
+            "| Annualized Sharpe (2% rf):", 
+            round(sector_annualized_sharpe, 3)))
+# Ensure only numeric data is used for individual asset statistics
+numeric_returns_matrix <- 
+  company_returns_matrix[, sapply(company_returns_matrix, is.numeric)]
+# Print Individual Asset Summaries
+print("\n==== Individual Asset Summaries ====")
+for (i in 1:ncol(numeric_returns_matrix)) {
+  ticker <- company_tickers[i]
+  mean_return <- 
+    mean(numeric_returns_matrix[, i], na.rm = TRUE)  # Daily mean return
+  mean_return_pct <- mean_return * 100  # Convert to percentage
+  sd_return <- 
+    sd(numeric_returns_matrix[, i], na.rm = TRUE)  # Daily standard deviation
+  annualized_sharpe <- 
+    ((mean_return - daily_risk_free_rate) * 252) / (sd_return * sqrt(252))  
+  
+  print(paste("Asset:", ticker))
+  print(paste("  Daily Mean Return (Decimal):", round(mean_return, 5)))
+  print(paste("  Daily Mean Return (%):", round(mean_return_pct, 3), "%"))
+  print(paste("  Daily Standard Deviation:", round(sd_return, 5)))
+  print(paste("  Annualized Sharpe Ratio (2% rf):", 
+              round(annualized_sharpe, 3)))
+  cat("\n")  # Add a blank line after each asset's statistics
+}
+```
+
+```{r}
+# Load the corrplot library
+library(corrplot)
+# Calculate the correlation matrix
+correlation_matrix <- cor(company_returns_matrix, use = "complete.obs")
+# Plot the heatmap
+corrplot(correlation_matrix, method = "color", 
+         type = "upper", tl.cex = 0.8, tl.col = "black", 
+         addCoef.col = "black", number.cex = 0.7, 
+         title = "Correlation Heatmap of Asset Returns", mar = c(0, 0, 1, 0))
+# Add a color legend
+color.legend <- legend("bottomright", legend = c("Low", "High"), 
+                        fill = c("blue", "red"), 
+                        title = "Correlation", cex = 0.8)
+```
+
+```{r}
+# Function to calculate portfolio return and risk
+portfolio_stats <- function(weights, returns_matrix) {
+  # Calculate portfolio return
+  expected_return <- sum(weights * colMeans(returns_matrix, na.rm = TRUE))
+  # Calculate portfolio risk
+  cov_matrix <- cov(returns_matrix, use = "complete.obs")
+  portfolio_variance <- t(weights) %*% cov_matrix %*% weights
+  portfolio_risk <- sqrt(portfolio_variance)
+  return(c(ExpectedReturn = expected_return, Risk = portfolio_risk))
+}
+# Function to calculate the tangency portfolio weights
+tangency_portfolio <- function(returns_matrix, risk_free_rate) {
+  excess_returns <- colMeans(returns_matrix, na.rm = TRUE) - risk_free_rate
+  cov_matrix <- cov(returns_matrix, use = "complete.obs")
+  inv_cov_matrix <- solve(cov_matrix)
+  weights <- 
+    inv_cov_matrix %*% excess_returns / sum(inv_cov_matrix %*% excess_returns)
+  return(as.numeric(weights))
+}
+# Tangency Portfolio with Risk-Free Rate
+risk_free_rate <- 0.02/252  # Convert annual risk-free rate to daily
+tangency_weights <- tangency_portfolio(company_returns_matrix, risk_free_rate)
+names(tangency_weights) <- 
+  colnames(company_returns_matrix)  # Assign asset names to weights
+# Calculate tangency portfolio statistics
+tangency_stats <- portfolio_stats(tangency_weights, company_returns_matrix)
+# Generate weights to extract the efficient frontier curve
+set.seed(42)  # Ensure reproducibility
+n_points <- 100  # Number of points on the efficient frontier
+efficient_weights <- 
+  matrix(NA, nrow = n_points, ncol = ncol(company_returns_matrix))
+# Generate weights linearly from minimum variance to maximum return
+returns_mean <- colMeans(company_returns_matrix, na.rm = TRUE)
+for (i in 1:n_points) {
+  alpha <- (i - 1) / (n_points - 1)  # Weight factor (0 to 1)
+  efficient_weights[i, ] <- 
+    (1 - alpha) * portfolio_weights + alpha * tangency_weights
+}
+# Normalize weights to ensure they sum to 1
+efficient_weights <- efficient_weights / rowSums(efficient_weights)
+# Calculate efficient frontier statistics
+efficient_frontier <- 
+  t(apply(efficient_weights, 1, portfolio_stats, 
+          returns_matrix = company_returns_matrix))
+# Individual assets (mean and standard deviation)
+individual_assets <- data.frame(
+  Risk = apply(company_returns_matrix, 2, sd, na.rm = TRUE),
+  ExpectedReturn = colMeans(company_returns_matrix, na.rm = TRUE),
+  Asset = colnames(company_returns_matrix)
+)
+# Adjust x and y limits to include tangency portfolio and individual assets
+x_limits <- 
+  range(c(efficient_frontier[, "Risk"], tangency_stats["Risk"], 
+          individual_assets$Risk)) * c(0.5, 1.2)
+y_limits <- range(c(efficient_frontier[, "ExpectedReturn"], 
+                    tangency_stats["ExpectedReturn"], 
+                    individual_assets$ExpectedReturn)) * c(0.5, 1.2)
+# Plot the Efficient Frontier Curve
+plot(efficient_frontier[, "Risk"], efficient_frontier[, "ExpectedReturn"], 
+     type = "l", col = "blue", lwd = 2, 
+     xlab = "Risk (Standard Deviation)", 
+     ylab = "Expected Return", 
+     main = "Efficient Frontier with Tangency Portfolio", 
+     xlim = x_limits, ylim = y_limits)
+# Highlight the Minimum Variance Portfolio
+min_var_stats <- portfolio_stats(portfolio_weights, company_returns_matrix)
+points(min_var_stats["Risk"], min_var_stats["ExpectedReturn"], 
+       col = "red", pch = 19, cex = 1.5)
+text(min_var_stats["Risk"], min_var_stats["ExpectedReturn"], 
+     labels = "Min Variance", pos = 4, col = "red")
+# Highlight the Tangency Portfolio
+points(tangency_stats["Risk"], tangency_stats["ExpectedReturn"], 
+       col = "green", pch = 19, cex = 1.5)
+text(tangency_stats["Risk"], tangency_stats["ExpectedReturn"], 
+     labels = "Tangency", pos = 4, col = "green")
+# Plot Individual Assets
+points(individual_assets$Risk, individual_assets$ExpectedReturn, 
+       col = "purple", pch = 17, cex = 1.2)
+text(individual_assets$Risk, individual_assets$ExpectedReturn, 
+     labels = individual_assets$Asset, pos = 4, col = "purple")
+# Add a legend
+legend("topleft", legend = c("Efficient Frontier (Curve)", 
+                             "Min Variance Portfolio", "Tangency Portfolio", 
+                             "Individual Assets"),
+       col = c("blue", "red", "green", "purple"), lwd = c(2, NA, NA, NA), 
+       pch = c(NA, 19, 19, 17), cex = 0.8)
+```
+
+```{r}
+# Print Tangency Portfolio Weights
+print("==== Tangency Portfolio Weights ====")
+print(round(tangency_weights, 4))
+# Tangency Portfolio Summary Statistics (Daily)
+tangency_mean <- tangency_stats["ExpectedReturn"]  # Daily mean return
+tangency_mean_pct <- tangency_mean * 100  # Convert to percentage
+tangency_sd <- tangency_stats["Risk"]  # Daily standard deviation
+# Annualized Sharpe Ratio
+tangency_annualized_sharpe <- 
+  ((tangency_mean - daily_risk_free_rate) * 252) / (tangency_sd * sqrt(252))
+# Print the Tangency Portfolio Daily Statistics and Annualized Sharpe
+print("\n==== Tangency Portfolio Daily Statistics ====")
+print(paste("Daily Mean Return (%):", round(tangency_mean_pct, 3), "%"))
+print(paste("Daily Standard Deviation (%):", round(tangency_sd * 100, 3), "%"))
+print(paste("Annualized Sharpe Ratio (2% rf):", 
+            round(tangency_annualized_sharpe, 3)))
+```
+### Project Question 4
+
+```{r}
+# Ensure the tangency_weights and company_returns_matrix are defined
+# Tangency Portfolio Weights (already calculated earlier)
+tangency_weights <- tangency_portfolio(company_returns_matrix, risk_free_rate)
+names(tangency_weights) <- colnames(company_returns_matrix)  
+# Calculate Tangency Portfolio Returns (2017–2019)
+tangency_returns <- as.matrix(company_returns_matrix) %*% tangency_weights
+tangency_returns <- 
+  xts(tangency_returns, order.by = index(company_returns_matrix))
+# Function to calculate cumulative returns
+calculate_cumulative_returns <- function(returns) {
+  cum_returns <- cumprod(1 + returns) - 1
+  xts(cum_returns, order.by = index(returns))
+}
+# Function to calculate annualized Sharpe ratio
+calculate_sharpe_ratio <- function(returns, risk_free_rate_annual) {
+  daily_risk_free_rate <- (1 + risk_free_rate_annual)^(1/252) - 1
+  excess_returns <- returns - daily_risk_free_rate
+  sharpe_ratio <- 
+    mean(excess_returns, na.rm = TRUE) / sd(excess_returns, 
+                                            na.rm = TRUE) * sqrt(252)
+  return(sharpe_ratio)
+}
+# Calculate cumulative returns for the Tangency Portfolio and sector
+tangency_cum_returns <- calculate_cumulative_returns(tangency_returns)  
+sector_cum_returns <- calculate_cumulative_returns(sector_returns)     
+# Calculate Sharpe ratios for 2017–2019
+sharpe_tangency_2017_2019 <- calculate_sharpe_ratio(tangency_returns, 0.02)
+sharpe_sector_2017_2019 <- calculate_sharpe_ratio(sector_returns, 0.02)
+# Plot cumulative returns for 2017–2019
+ylim_range <- range(tangency_cum_returns, sector_cum_returns, na.rm = TRUE)
+plot(index(sector_cum_returns), sector_cum_returns, 
+     type = "l", col = "blue", lwd = 2,
+     xlab = "Date", ylab = "Cumulative Return", 
+     main = "Tangency Portfolio vs Sector (2017–2019)",
+     ylim = ylim_range)
+lines(index(tangency_cum_returns), tangency_cum_returns, 
+      col = "red", lwd = 2)
+legend("topleft", legend = c("Sector", "Tangency Portfolio"), 
+       col = c("blue", "red"), lwd = 2)
+# Fetch data for 2020–2022
+start_date <- as.Date("2020-01-01")
+end_date <- as.Date("2022-12-31")
+# Fetch data for sector and companies (2020–2022)
+sector_prices_2020 <- getSymbols(sector_ticker, 
+                                 src = "yahoo", from = start_date, 
+                                 to = end_date, auto.assign = FALSE)
+company_prices_2020 <- lapply(company_tickers, function(ticker) {
+  getSymbols(ticker, src = "yahoo", from = start_date, to = end_date, 
+             auto.assign = FALSE)
+})
+# Calculate daily log returns for sector and companies (2020–2022)
+sector_returns_2020 <- dailyReturn(Ad(sector_prices_2020), type = "log")
+company_returns_2020 <- lapply(company_prices_2020, function(prices) {
+  dailyReturn(Ad(prices), type = "log")
+})
+# Combine company returns for 2020–2022
+company_returns_matrix_2020 <- do.call(merge, company_returns_2020)
+colnames(company_returns_matrix_2020) <- company_tickers
+# Calculate Tangency Portfolio returns for 2020–2022 using the same weights
+tangency_returns_2020 <- 
+  as.matrix(company_returns_matrix_2020) %*% tangency_weights
+tangency_returns_2020 <- xts(tangency_returns_2020, 
+                             order.by = index(company_returns_matrix_2020))
+# Calculate cumulative returns for Tangency Portfolio and sector (2020–2022)
+tangency_cum_returns_2020 <- 
+  calculate_cumulative_returns(tangency_returns_2020)
+sector_cum_returns_2020 <- calculate_cumulative_returns(sector_returns_2020)
+# Calculate Sharpe ratios for 2020–2022
+sharpe_tangency_2020_2022 <- 
+  calculate_sharpe_ratio(tangency_returns_2020, 0.02)
+sharpe_sector_2020_2022 <- calculate_sharpe_ratio(sector_returns_2020, 0.02)
+# Plot cumulative returns for 2020–2022
+ylim_range_2020 <- range(tangency_cum_returns_2020, 
+                         sector_cum_returns_2020, na.rm = TRUE)
+plot(index(sector_cum_returns_2020), 
+     sector_cum_returns_2020, type = "l", col = "blue", lwd = 2,
+     xlab = "Date", 
+     ylab = "Cumulative Return", 
+     main = "Tangency Portfolio vs Sector (2020–2022)",
+     ylim = ylim_range_2020)
+lines(index(tangency_cum_returns_2020), 
+      tangency_cum_returns_2020, col = "red", lwd = 2)
+legend("topleft", legend = c("Sector", "Tangency Portfolio"), 
+       col = c("blue", "red"), lwd = 2)
+# Print Sharpe ratios
+print(paste("Sharpe Ratio (Tangency Portfolio, 2017–2019):", 
+            round(sharpe_tangency_2017_2019, 3)))
+print(paste("Sharpe Ratio (Sector, 2017–2019):", 
+            round(sharpe_sector_2017_2019, 3)))
+print(paste("Sharpe Ratio (Tangency Portfolio, 2020–2022):", 
+            round(sharpe_tangency_2020_2022, 3)))
+print(paste("Sharpe Ratio (Sector, 2020–2022):", 
+            round(sharpe_sector_2020_2022, 3)))
+```
+### Project Question 5
+
+```{r}
+# Define start and end dates for the analysis
+start_date <- as.Date("2017-01-01")
+end_date <- as.Date("2019-12-31")
+# Define S&P 500 ticker and fetch data for the sample period (2017–2019)
+sp500_ticker <- "^GSPC"  # S&P 500 Index
+sp500_prices <- getSymbols(sp500_ticker, 
+                           src = "yahoo", from = start_date, 
+                           to = end_date, auto.assign = FALSE)
+sp500_returns <- dailyReturn(Ad(sp500_prices), type = "log")
+# Fetch sector and company data for the same period
+sector_prices <- getSymbols(sector_ticker, src = "yahoo", 
+                            from = start_date, 
+                            to = end_date, auto.assign = FALSE)
+sector_returns <- dailyReturn(Ad(sector_prices), type = "log")
+company_prices <- lapply(company_tickers, function(ticker) {
+  getSymbols(ticker, src = "yahoo", from = start_date, 
+             to = end_date, auto.assign = FALSE)
+})
+company_returns <- lapply(company_prices, function(prices) {
+  dailyReturn(Ad(prices), type = "log")
+})
+company_returns_matrix <- do.call(merge, company_returns)  
+colnames(company_returns_matrix) <- company_tickers
+# Calculate portfolio returns using Tangency Weights
+tangency_weights <- tangency_portfolio(company_returns_matrix, risk_free_rate)
+portfolio_returns <- as.matrix(company_returns_matrix) %*% tangency_weights
+portfolio_returns <- xts(portfolio_returns, 
+                         order.by = index(company_returns_matrix))
+# Align all returns: S&P 500, sector, portfolio, and company returns
+aligned_returns <- merge.xts(sp500_returns, 
+                             sector_returns, portfolio_returns, 
+                             company_returns_matrix)
+aligned_returns <- na.omit(aligned_returns)  # Remove rows with NA values
+colnames(aligned_returns) <- c("SP500", "Sector", "Portfolio", company_tickers)
+# Debug: Check aligned data
+if (nrow(aligned_returns) == 0) {
+  stop("No valid data available after merging and NA removal.")
+}
+# CAPM Function with hypothesis testing
+calculate_capm_with_pvalues <- function(dependent, market) {
+  if (all(is.na(dependent)) || all(is.na(market)) || 
+      length(dependent) == 0 || length(market) == 0) {
+    return(c(alpha = NA, beta = NA, p_alpha = NA, p_beta = NA))
+  }
+  model <- lm(dependent ~ market)
+  alpha <- coef(model)[1]
+  beta <- coef(model)[2]
+  # Extract p-values for alpha and beta
+  p_values <- summary(model)$coefficients[, 4]
+  p_alpha <- p_values[1]
+  p_beta <- p_values[2]
+  return(c(alpha = alpha, beta = beta, p_alpha = p_alpha, p_beta = p_beta))
+}
+# Create a data frame for CAPM results
+capm_results <- data.frame(Asset = c("Sector", "Portfolio", company_tickers), 
+                           Alpha = NA, Beta = NA, 
+                           P_Alpha = NA, P_Beta = NA)
+# Define risk-free rate
+annual_risk_free_rate <- 0.02  # 2% annual
+daily_risk_free_rate <- annual_risk_free_rate / 252  # Convert to daily
+# Adjust SP500 returns to excess returns
+sp500_excess_returns <- aligned_returns[, "SP500"] - daily_risk_free_rate
+# Calculate CAPM for the sector
+sector_excess_returns <- aligned_returns[, "Sector"] - daily_risk_free_rate
+capm_sector <- calculate_capm_with_pvalues(sector_excess_returns, 
+                                           sp500_excess_returns)
+capm_results[1, 2:5] <- capm_sector
+# Calculate CAPM for the portfolio
+portfolio_excess_returns <- 
+  aligned_returns[, "Portfolio"] - daily_risk_free_rate
+capm_portfolio <- calculate_capm_with_pvalues(portfolio_excess_returns, 
+                                              sp500_excess_returns)
+capm_results[2, 2:5] <- capm_portfolio
+# Calculate CAPM for each company
+for (i in seq_along(company_tickers)) {
+  company_excess_returns <- 
+    aligned_returns[, company_tickers[i]] - daily_risk_free_rate
+  capm_company <- 
+    calculate_capm_with_pvalues(company_excess_returns, sp500_excess_returns)
+  capm_results[i + 2, 2:5] <- capm_company
+}
+# Round results to 3 decimal places
+capm_results$Alpha <- round(capm_results$Alpha, 3)
+capm_results$Beta <- round(capm_results$Beta, 3)
+capm_results$P_Alpha <- round(capm_results$P_Alpha, 3)
+capm_results$P_Beta <- round(capm_results$P_Beta, 3)
+# Print the CAPM results with hypothesis testing
+print("CAPM Results with Hypothesis Testing (2017–2019):")
+print(capm_results)
+```
+
+```{r}
+# Calculate Expected and Actual Returns
+market_risk_premium <- mean(sp500_excess_returns, na.rm = TRUE) * 252  
+capm_results$Expected_Return <- 
+  annual_risk_free_rate + capm_results$Beta * market_risk_premium
+# Calculate Actual Returns (annualized)
+actual_returns <- colMeans(aligned_returns, na.rm = TRUE) * 252  # Annualize
+capm_results$Actual_Return <- 
+  c(actual_returns["Sector"], actual_returns["Portfolio"], 
+    actual_returns[company_tickers])
+# Define X and Y limits dynamically
+x_lim <- c(0, max(capm_results$Beta, na.rm = TRUE) + 0.5)
+y_lim <- c(annual_risk_free_rate, max(capm_results$Expected_Return, 
+                                      capm_results$Actual_Return, 
+                                      na.rm = TRUE) + 0.05)
+# Plot the Security Market Line (SML)
+plot(
+  x = c(0, max(capm_results$Beta, na.rm = TRUE)),  # SML from Beta = 0
+  y = c(annual_risk_free_rate, 
+        max(capm_results$Expected_Return, na.rm = TRUE)),  
+  type = "l", col = "blue", lwd = 2,
+  xlab = "Beta", ylab = "Expected Return",
+  main = "Security Market Line (2017–2019)",
+  xlim = x_lim, ylim = y_lim
+)
+# Add individual points for assets
+asset_colors <- c("blue", "green", "orange", "purple", "brown", "pink")  
+for (i in 1:nrow(capm_results)) {
+  points(capm_results$Beta[i], capm_results$Actual_Return[i], 
+         col = asset_colors[i], pch = 19, cex = 1.5)
+}
+# Annotate the points with asset names
+for (i in 1:nrow(capm_results)) {
+  text(
+    capm_results$Beta[i], capm_results$Actual_Return[i],
+    labels = capm_results$Asset[i], pos = 4, cex = 0.8, col = asset_colors[i]
+  )
+}
+# Add a legend to the plot
+legend(
+  "topleft", legend = capm_results$Asset,
+  col = asset_colors, pch = 19, cex = 0.8, pt.cex = 1.5
+)
+```
+
+### Project Question 6
+
+```{r}
+# Define the specific date range for CAPM (2020–2022)
+capm_start_date_2020 <- as.Date("2020-01-01")
+capm_end_date_2022 <- as.Date("2022-12-31")
+# Fetch S&P 500 (^GSPC) data for CAPM analysis
+sp500_prices_2020 <- getSymbols("^GSPC", src = "yahoo", 
+                                from = capm_start_date_2020, 
+                                to = capm_end_date_2022, auto.assign = FALSE)
+sp500_returns_2020 <- dailyReturn(Ad(sp500_prices_2020), type = "log")
+# Fetch sector data for the same period
+sector_prices_2020 <- getSymbols(sector_ticker, src = "yahoo", 
+                                 from = capm_start_date_2020, 
+                                 to = capm_end_date_2022, auto.assign = FALSE)
+sector_returns_2020 <- dailyReturn(Ad(sector_prices_2020), type = "log")
+# Fetch company data for the same period
+company_prices_2020 <- lapply(company_tickers, function(ticker) {
+  getSymbols(ticker, src = "yahoo", 
+             from = capm_start_date_2020, 
+             to = capm_end_date_2022, auto.assign = FALSE)
+})
+company_returns_2020 <- lapply(company_prices_2020, function(prices) {
+  dailyReturn(Ad(prices), type = "log")
+})
+# Combine company returns into a matrix
+company_returns_matrix_2020 <- do.call(merge, company_returns_2020)
+colnames(company_returns_matrix_2020) <- company_tickers
+# Calculate Tangency Portfolio returns for 2020–2022 using the same weights
+tangency_weights <- 
+  tangency_portfolio(company_returns_matrix, daily_risk_free_rate)  
+portfolio_returns_2020 <- 
+  as.matrix(company_returns_matrix_2020) %*% tangency_weights
+portfolio_returns_2020 <- 
+  xts(portfolio_returns_2020, order.by = index(company_returns_matrix_2020))
+
+# Align all returns: S&P 500, sector, portfolio, and company returns
+aligned_returns_2020 <- merge.xts(sp500_returns_2020, 
+                                  sector_returns_2020, 
+                                  portfolio_returns_2020, 
+                                  company_returns_matrix_2020)
+aligned_returns_2020 <- na.omit(aligned_returns_2020)  # Remove rows with NA values
+colnames(aligned_returns_2020) <- 
+  c("SP500", "Sector", "Portfolio", company_tickers)
+# Define risk-free rate
+annual_risk_free_rate <- 0.02  # 2% annual
+daily_risk_free_rate <- annual_risk_free_rate / 252  # Convert to daily
+# Adjust S&P 500 returns to excess returns
+sp500_excess_returns_2020 <- 
+  aligned_returns_2020[, "SP500"] - daily_risk_free_rate
+# CAPM Function with hypothesis testing
+calculate_capm_with_pvalues <- function(dependent, market) {
+  if (all(is.na(dependent)) || all(is.na(market)) || 
+      length(dependent) == 0 || length(market) == 0) {
+    return(c(alpha = NA, beta = NA, p_alpha = NA, p_beta = NA))
+  }
+  model <- lm(dependent ~ market)
+  alpha <- coef(model)[1]
+  beta <- coef(model)[2]
+  # Extract p-values for alpha and beta
+  p_values <- summary(model)$coefficients[, 4]
+  p_alpha <- p_values[1]
+  p_beta <- p_values[2]
+  return(c(alpha = round(alpha, 3), beta = round(beta, 3), 
+           p_alpha = round(p_alpha, 3), p_beta = round(p_beta, 3)))
+}
+# Create a data frame for CAPM results (2020–2022)
+capm_results_2020 <- 
+  data.frame(Asset = c("Sector", "Portfolio", company_tickers), 
+                                Alpha = NA, Beta = NA, 
+                                P_Alpha = NA, P_Beta = NA)
+# Calculate CAPM for the sector
+sector_excess_returns_2020 <- 
+  aligned_returns_2020[, "Sector"] - daily_risk_free_rate
+capm_sector_2020 <- 
+  calculate_capm_with_pvalues(sector_excess_returns_2020, 
+                              sp500_excess_returns_2020)
+capm_results_2020[1, 2:5] <- capm_sector_2020
+# Calculate CAPM for the portfolio
+portfolio_excess_returns_2020 <- 
+  aligned_returns_2020[, "Portfolio"] - daily_risk_free_rate
+capm_portfolio_2020 <- 
+  calculate_capm_with_pvalues(portfolio_excess_returns_2020, 
+                              sp500_excess_returns_2020)
+capm_results_2020[2, 2:5] <- capm_portfolio_2020
+# Calculate CAPM for each company
+for (i in seq_along(company_tickers)) {
+  company_excess_returns_2020 <- 
+    aligned_returns_2020[, company_tickers[i]] - daily_risk_free_rate
+  capm_company_2020 <- 
+    calculate_capm_with_pvalues(company_excess_returns_2020, 
+                                sp500_excess_returns_2020)
+  capm_results_2020[i + 2, 2:5] <- capm_company_2020
+}
+# Print the CAPM results with hypothesis testing
+print("CAPM Results with Hypothesis Testing (2020–2022):")
+print(capm_results_2020)
+```
+
+```{r}
+# Calculate the market risk premium (annualized)
+market_risk_premium <- mean(sp500_excess_returns_2020, na.rm = TRUE) * 252  
+# Calculate Expected Returns using CAPM formula
+capm_results_2020$Expected_Return <- 
+  annual_risk_free_rate + capm_results_2020$Beta * market_risk_premium
+# Calculate Actual Returns (annualized)
+actual_returns <- colMeans(aligned_returns_2020, na.rm = TRUE) * 252
+capm_results_2020$Actual_Return <- 
+  c(actual_returns["Sector"], actual_returns["Portfolio"], 
+    actual_returns[company_tickers])
+# Define X and Y axis limits dynamically with added buffer for zoom-out
+x_lim <- c(0, max(capm_results_2020$Beta, na.rm = TRUE) + 0.1)  
+y_lim <- c(0, max(capm_results_2020$Expected_Return, 
+                  capm_results_2020$Actual_Return, na.rm = TRUE) + 0.01)  
+# Plot the Security Market Line (SML) with zoomed-out view
+plot(
+  x = c(0, max(capm_results_2020$Beta, na.rm = TRUE) + 0.1),  # Extend X-axis
+  y = c(annual_risk_free_rate, 
+        annual_risk_free_rate + (max(capm_results_2020$Beta, 
+                                     na.rm = TRUE) + 0.1)*market_risk_premium),  
+  type = "l", col = "blue", lwd = 2,
+  xlab = "Beta", ylab = "Expected Return",
+  main = "Security Market Line (2020–2022)",
+  xlim = x_lim, ylim = y_lim
+)
+# Add individual points for assets
+for (i in 1:nrow(capm_results_2020)) {
+  points(capm_results_2020$Beta[i], 
+         capm_results_2020$Actual_Return[i], 
+         col = asset_colors[i], pch = 19, cex = 1.5)
+}
+# Annotate the points with asset names
+for (i in 1:nrow(capm_results_2020)) {
+  text(
+    capm_results_2020$Beta[i], 
+    capm_results_2020$Actual_Return[i], 
+    labels = capm_results_2020$Asset[i], 
+    pos = 4, cex = 0.8, col = asset_colors[i]
+  )
+}
+# Add a legend to the plot
+legend(
+  "topleft", legend = capm_results_2020$Asset, 
+  col = asset_colors, pch = 19, cex = 0.8, pt.cex = 1.5
+)
+```
+
+### Project Question 7
+
+```{r}
+# Define a function to calculate VaR and ES
+calculate_var_es <- function(returns, confidence_level = 0.05) {
+  # Value at Risk (VaR): quantile of returns
+  var <- quantile(returns, probs = confidence_level, na.rm = TRUE)
+  # Expected Shortfall (ES): mean of returns below the VaR
+  es <- mean(returns[returns <= var], na.rm = TRUE)
+  c(VaR = var, ES = es)
+}
+# Initialize the results data frame
+var_es_results <- data.frame(
+  Asset = c("Sector", "Tangency Portfolio", company_tickers),
+  VaR = NA,
+  ES = NA
+)
+# Sector VaR and ES
+var_es_results[1, 2:3] <- calculate_var_es(as.numeric(sector_returns), 
+                                           confidence_level = 0.05)
+# Tangency Portfolio VaR and ES
+var_es_results[2, 2:3] <- calculate_var_es(as.numeric(portfolio_returns), 
+                                           confidence_level = 0.05)
+# Company VaR and ES
+for (i in seq_along(company_tickers)) {
+  var_es_results[i + 2, 2:3] <- 
+    calculate_var_es(as.numeric(company_returns[[i]]), confidence_level = 0.05)
+}
+# Round the results to 3 decimals
+var_es_results$VaR <- round(var_es_results$VaR, 3)
+var_es_results$ES <- round(var_es_results$ES, 3)
+# Print the results
+print("VaR and ES Results (2017–2019):")
+print(var_es_results)
+```
+
+```{r}
+# Define a function to plot the quantiles
+plot_var_es <- function(returns, var, es, asset_name) {
+  hist(returns, breaks = 50, col = "lightblue", probability = TRUE,
+       main = paste("VaR and ES for", asset_name),
+       xlab = "Returns", ylab = "Density")
+  # Add vertical lines for VaR and ES
+  abline(v = var, col = "red", lwd = 2, lty = 2)  # VaR line
+  abline(v = es, col = "purple", lwd = 2, lty = 2)  # ES line
+  # Add a legend
+  legend("topright", legend = c("VaR (5%)", "ES (Expected Shortfall)"),
+         col = c("red", "purple"), lty = 2, lwd = 2, cex = 0.8)
+}
+# Plot for Sector
+sector_var <- var_es_results$VaR[1]
+sector_es <- var_es_results$ES[1]
+plot_var_es(as.numeric(sector_returns), sector_var, sector_es, "Sector")
+# Plot for Tangency Portfolio
+portfolio_var <- var_es_results$VaR[2]
+portfolio_es <- var_es_results$ES[2]
+plot_var_es(as.numeric(portfolio_returns), 
+            portfolio_var, portfolio_es, "Tangency Portfolio")
+# Plots for Individual Companies
+for (i in seq_along(company_tickers)) {
+  company_var <- var_es_results$VaR[i + 2]
+  company_es <- var_es_results$ES[i + 2]
+  company_name <- company_tickers[i]
+  # Plot for each company
+  plot_var_es(as.numeric(company_returns[[i]]), 
+              company_var, company_es, company_name)
+}
+```
+
+### Project Question 8
+
+```{r}
+# Define a function to calculate VaR and ES (from Part 7)
+calculate_var_es <- function(returns, confidence_level = 0.05) {
+  # Value at Risk (VaR): quantile of returns
+  var <- quantile(returns, probs = confidence_level, na.rm = TRUE)
+  # Expected Shortfall (ES): mean of returns below the VaR
+  es <- mean(returns[returns <= var], na.rm = TRUE)
+  c(VaR = var, ES = es)
+}
+# Fetch sector and company returns for 2020–2022
+sector_returns_2020 <- 
+  dailyReturn(Ad(getSymbols(sector_ticker, src = "yahoo", 
+                            from = capm_start_date_2020, 
+                            to = capm_end_date_2022, 
+                            auto.assign = FALSE)), type = "log")
+company_returns_2020 <- lapply(company_tickers, function(ticker) {
+  dailyReturn(Ad(getSymbols(ticker, 
+                            src = "yahoo", from = capm_start_date_2020, 
+                            to = capm_end_date_2022, auto.assign = FALSE)), 
+              type = "log")
+})
+# Calculate portfolio returns for 2020–2022 using the same weights
+company_returns_matrix_2020 <- do.call(merge.xts, company_returns_2020)
+portfolio_returns_2020 <- 
+  xts(as.matrix(company_returns_matrix_2020) %*% portfolio_weights, 
+      order.by = index(company_returns_matrix_2020))
+# Calculate VaR and ES for sector, portfolio, and companies (2020–2022)
+var_es_results_2020 <- data.frame(
+  Asset = c("Sector", "Portfolio", company_tickers),
+  VaR = NA,
+  ES = NA
+)
+# Sector VaR and ES
+var_es_results_2020[1, 2:3] <- 
+  calculate_var_es(as.numeric(sector_returns_2020), confidence_level = 0.05)
+# Portfolio VaR and ES
+var_es_results_2020[2, 2:3] <- 
+  calculate_var_es(as.numeric(portfolio_returns_2020), confidence_level = 0.05)
+# Company VaR and ES
+for (i in seq_along(company_tickers)) {
+  var_es_results_2020[i + 2, 2:3] <- 
+    calculate_var_es(as.numeric(company_returns_2020[[i]]), 
+                     confidence_level = 0.05)
+}
+# Round the results to the 3rd decimal
+var_es_results_2020$VaR <- round(var_es_results_2020$VaR, 3)
+var_es_results_2020$ES <- round(var_es_results_2020$ES, 3)
+# Print the results
+print("VaR and ES Results (2020–2022):")
+print(var_es_results_2020)
+```
+
+
+```{r}
+# Define a function to plot the quantiles with positive VaR and ES
+plot_var_es <- function(returns, var, es, asset_name) {
+  hist(returns, breaks = 50, col = "lightblue", probability = TRUE,
+       main = paste("VaR and ES for", asset_name, "(2020–2022)"),
+       xlab = "Returns", ylab = "Density")
+  # Add vertical lines for VaR and ES
+  abline(v = var, col = "red", lwd = 2, lty = 2)  # VaR line
+  abline(v = es, col = "purple", lwd = 2, lty = 2)  # ES line
+  # Add a legend
+  legend("topright", legend = c("VaR (5%)", "ES (Expected Shortfall)"),
+         col = c("red", "purple"), lty = 2, lwd = 2, cex = 0.8)
+}
+# Plot for Sector
+sector_var_2020 <- var_es_results_2020$VaR[1]
+sector_es_2020 <- var_es_results_2020$ES[1]
+plot_var_es(as.numeric(sector_returns_2020), 
+            sector_var_2020, sector_es_2020, "Sector")
+# Plot for Portfolio
+portfolio_var_2020 <- var_es_results_2020$VaR[2]
+portfolio_es_2020 <- var_es_results_2020$ES[2]
+plot_var_es(as.numeric(portfolio_returns_2020), 
+            portfolio_var_2020, portfolio_es_2020, "Portfolio")
+# Plots for Individual Companies
+for (i in seq_along(company_tickers)) {
+  company_var_2020 <- var_es_results_2020$VaR[i + 2]
+  company_es_2020 <- var_es_results_2020$ES[i + 2]
+  company_name <- company_tickers[i]
+  # Plot for each company
+  plot_var_es(as.numeric(company_returns_2020[[i]]), 
+              company_var_2020, company_es_2020, company_name)
+}
+```
